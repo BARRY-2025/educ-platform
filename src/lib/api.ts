@@ -336,3 +336,126 @@ export const attendanceApi = {
       body: JSON.stringify({ student_uuid: studentUuid, present, notes }),
     }),
 };
+
+const GRADE_API = import.meta.env.VITE_GRADE_API_URL ?? 'http://localhost:8004/api/v1';
+
+async function gradeRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('auth-storage');
+  let bearer: string | null = null;
+  try { bearer = token ? JSON.parse(token)?.state?.token : null; } catch { /* ignore */ }
+
+  const establishmentId = import.meta.env.VITE_ESTABLISHMENT_ID ?? '';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-Establishment-ID': establishmentId,
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+
+  const response = await fetch(`${GRADE_API}${path}`, { ...options, headers });
+  const body = await response.json();
+  if (!response.ok || body.success === false) {
+    throw new Error(body.message ?? `Request failed (${response.status})`);
+  }
+  return body.data as T;
+}
+
+export interface EvaluationPeriodApiModel {
+  uuid: string;
+  establishment_uuid: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+}
+
+export interface CompetenceApiModel {
+  uuid: string;
+  establishment_uuid: string;
+  code: string;
+  name: string;
+  domain: string;
+}
+
+export interface StudentEvaluationApiModel {
+  uuid: string;
+  student_uuid: string;
+  competence_uuid: string;
+  period_uuid: string;
+  rating: 'acquired' | 'in_progress' | 'needs_review';
+  observation: string | null;
+  evaluated_by_uuid: string;
+}
+
+export interface BulletinApiModel {
+  uuid: string;
+  establishment_uuid: string;
+  student_uuid: string;
+  period_uuid: string;
+  class_uuid: string | null;
+  status: 'draft' | 'published' | 'delivered';
+  teacher_comment: string | null;
+  director_comment: string | null;
+  published_at: string | null;
+  delivered_at: string | null;
+  evaluations?: StudentEvaluationApiModel[];
+}
+
+export const gradesApi = {
+  listPeriods: () =>
+    gradeRequest<EvaluationPeriodApiModel[]>('/evaluation-periods'),
+
+  listCompetences: () =>
+    gradeRequest<CompetenceApiModel[]>('/competences'),
+
+  getEvaluations: (studentUuid: string, periodUuid: string) =>
+    gradeRequest<StudentEvaluationApiModel[]>(
+      `/evaluations?student_uuid=${studentUuid}&period_uuid=${periodUuid}`,
+    ),
+
+  saveEvaluations: (payload: {
+    student_uuid: string;
+    period_uuid: string;
+    class_uuid?: string;
+    items: { competence_uuid: string; rating: string; observation?: string }[];
+  }) =>
+    gradeRequest<StudentEvaluationApiModel[]>('/evaluations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  listBulletins: (params?: { period_uuid?: string; status?: string; page?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.period_uuid) qs.set('period_uuid', params.period_uuid);
+    if (params?.status) qs.set('status', params.status);
+    if (params?.page) qs.set('page', String(params.page));
+    const query = qs.toString();
+    return gradeRequest<{ items: BulletinApiModel[]; pagination: { total: number; page: number; per_page: number } }>(
+      `/bulletins${query ? `?${query}` : ''}`,
+    );
+  },
+
+  getBulletin: (uuid: string) =>
+    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}`),
+
+  generateBulletin: (payload: {
+    student_uuid: string;
+    period_uuid: string;
+    class_uuid?: string;
+    teacher_comment?: string;
+  }) =>
+    gradeRequest<BulletinApiModel>('/bulletins', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  publishBulletin: (uuid: string, directorComment?: string) =>
+    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ director_comment: directorComment }),
+    }),
+
+  deliverBulletin: (uuid: string) =>
+    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}/deliver`, { method: 'POST' }),
+};

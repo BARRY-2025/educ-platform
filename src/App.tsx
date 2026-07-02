@@ -6,7 +6,6 @@ import { LoginPage } from './pages/auth';
 import { DashboardPage } from './pages/dashboard';
 import { StudentsListPage, StudentDetailPage } from './pages/students';
 import { AttendancePage, ScannerPage } from './pages/attendance';
-import { GradesPage } from './pages/grades';
 import { FinancePage } from './pages/finance';
 import { NotificationsPage } from './pages/notifications';
 import { AnalyticsPage } from './pages/analytics';
@@ -14,6 +13,12 @@ import { PublicRankingsPage, PublicStatisticsPage } from './pages/public';
 import { ProfilePage } from './pages/profile';
 import { SettingsPage } from './pages/settings';
 import { PreschoolEnrollmentPage, EnrollmentManagementPage } from './pages/enrollment';
+import {
+  PreschoolHubPage,
+  PreschoolEvaluationPage,
+  PreschoolBulletinsPage,
+  ParentBulletinsPage,
+} from './pages/preschool';
 import { useAuthStore } from './store/auth.store';
 
 const queryClient = new QueryClient();
@@ -56,10 +61,13 @@ function App() {
             <Route path="/students/:id" element={<StudentDetailPage />} />
             <Route path="/enrollment/preschool" element={<PreschoolEnrollmentPage />} />
             <Route path="/enrollments" element={<EnrollmentManagementPage />} />
+            <Route path="/preschool" element={<PreschoolHubPage />} />
+            <Route path="/preschool/evaluation" element={<PreschoolEvaluationPage />} />
+            <Route path="/preschool/bulletins" element={<PreschoolBulletinsPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/scan" element={<ScannerPage />} />
-            <Route path="/grades" element={<GradesPage />} />
-            <Route path="/my-grades" element={<GradesPage />} />
+            <Route path="/grades" element={<PreschoolEvaluationPage />} />
+            <Route path="/my-grades" element={<ParentBulletinsPage />} />
             <Route path="/finance" element={<FinancePage />} />
             <Route path="/my-payments" element={<FinancePage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
