@@ -16,6 +16,8 @@ import {
   School,
   Trophy,
   LucideIcon,
+  ClipboardList,
+  Baby,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 import { useUIStore } from '../../store/ui.store';
@@ -33,6 +35,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Tableau de bord', path: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin_etablissement', 'enseignant'] },
   { label: 'Apprenants', path: '/students', icon: Users, roles: ['super_admin', 'admin_etablissement', 'enseignant'] },
+  { label: 'Inscriptions', path: '/enrollments', icon: ClipboardList, roles: ['super_admin', 'admin_etablissement', 'parent'] },
+  { label: 'Pré-inscription', path: '/enrollment/preschool', icon: Baby, roles: ['super_admin', 'admin_etablissement', 'parent'] },
   { label: 'Mes notes', path: '/my-grades', icon: FileText, roles: ['apprenant'] },
   { label: 'Gestion des notes', path: '/grades', icon: FileText, roles: ['super_admin', 'admin_etablissement', 'enseignant'] },
   { label: 'Présences', path: '/attendance', icon: CalendarCheck, roles: ['super_admin', 'admin_etablissement', 'enseignant', 'parent'] },
@@ -87,7 +91,7 @@ export function Sidebar() {
       <nav className="flex-1 py-4 px-3 overflow-y-auto">
         <ul className="space-y-1">
           {filteredNavItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
             const Icon = item.icon;
 
             return (

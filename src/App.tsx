@@ -13,6 +13,7 @@ import { AnalyticsPage } from './pages/analytics';
 import { PublicRankingsPage, PublicStatisticsPage } from './pages/public';
 import { ProfilePage } from './pages/profile';
 import { SettingsPage } from './pages/settings';
+import { PreschoolEnrollmentPage, EnrollmentManagementPage } from './pages/enrollment';
 import { useAuthStore } from './store/auth.store';
 
 const queryClient = new QueryClient();
@@ -53,6 +54,8 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/students" element={<StudentsListPage />} />
             <Route path="/students/:id" element={<StudentDetailPage />} />
+            <Route path="/enrollment/preschool" element={<PreschoolEnrollmentPage />} />
+            <Route path="/enrollments" element={<EnrollmentManagementPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/scan" element={<ScannerPage />} />
             <Route path="/grades" element={<GradesPage />} />
