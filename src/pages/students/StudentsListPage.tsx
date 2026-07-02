@@ -4,7 +4,6 @@ import {
   Plus,
   Search,
   Download,
-  Upload,
   Eye,
   Edit,
   Trash2,
@@ -17,7 +16,7 @@ import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Avatar } from '../../components/ui/Avatar';
 import { Modal, ModalBody, ModalFooter } from '../../components/ui/Modal';
-import { students, classes } from '../../mock/data';
+import { useStudents } from '../../hooks/useStudents';
 import type { Student } from '../../types';
 
 const statusLabels: Record<string, string> = {
@@ -38,6 +37,8 @@ const statusVariants: Record<string, 'success' | 'warning' | 'error' | 'secondar
 
 export function StudentsListPage() {
   const navigate = useNavigate();
+  const { data, isLoading } = useStudents();
+  const students = data?.items ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -175,7 +176,7 @@ export function StudentsListPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card padding="sm" className="text-center p-4">
-          <p className="text-2xl font-bold text-primary-600">{students.length}</p>
+          <p className="text-2xl font-bold text-primary-600">{isLoading ? '...' : students.length}</p>
           <p className="text-sm text-secondary-500">Total</p>
         </Card>
         <Card padding="sm" className="text-center p-4">
@@ -229,9 +230,12 @@ export function StudentsListPage() {
                 ]}
               />
               <Select
-                label="Classe"
+                label="Cycle"
                 required
-                options={classes.map(c => ({ value: c.id, label: c.nom }))}
+                options={[
+                  { value: 'preschool', label: 'Maternelle' },
+                  { value: 'primary', label: 'Primaire' },
+                ]}
               />
             </div>
             <Input label="Email" type="email" placeholder="email@exemple.com" />
