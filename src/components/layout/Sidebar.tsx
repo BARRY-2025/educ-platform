@@ -11,14 +11,13 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ChevronDown,
   ChevronLeft,
-  School,
   Trophy,
   LucideIcon,
   ClipboardList,
   Baby,
 } from 'lucide-react';
+import { GuineaLogo } from '../brand/GuineaLogo';
 import { useAuthStore } from '../../store/auth.store';
 import { useUIStore } from '../../store/ui.store';
 import { Avatar } from '../ui/Avatar';
@@ -70,14 +69,12 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-100">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg">
-            <School className="w-6 h-6 text-white" />
-          </div>
+        <Link to="/dashboard" className="flex items-center gap-3">
+          <GuineaLogo size="sm" />
           {!sidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="font-bold text-secondary-900 leading-tight">EduPlatform</span>
-              <span className="text-xs text-secondary-400">Sénégal</span>
+              <span className="font-bold text-secondary-900 leading-tight">EduGuinée</span>
+              <span className="text-xs text-primary-600 font-medium">République de Guinée</span>
             </div>
           )}
         </Link>

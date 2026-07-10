@@ -1,4 +1,14 @@
-import { apiRequest } from './api-client';
+import {
+  authClient,
+  studentClient,
+  enrollmentClient,
+  attendanceClient,
+  gradeClient,
+  get,
+  post,
+} from './axios';
+
+export { apiRequest, ApiError, type ApiResponse } from './api-client';
 
 export interface StudentApiModel {
   uuid: string;
@@ -40,22 +50,17 @@ export interface CreateStudentPayload {
 
 export const studentsApi = {
   list: (page = 1, perPage = 20) =>
-    apiRequest<StudentsListResponse>(`/students?page=${page}&per_page=${perPage}`),
+    get<StudentsListResponse>(studentClient, '/students', { page, per_page: perPage }),
 
   get: (uuid: string) =>
-    apiRequest<StudentApiModel>(`/students/${uuid}`),
+    get<StudentApiModel>(studentClient, `/students/${uuid}`),
 
   create: (payload: CreateStudentPayload) =>
-    apiRequest<StudentApiModel>('/students', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    post<StudentApiModel>(studentClient, '/students', payload),
 };
 
-const STUDENT_API = import.meta.env.VITE_STUDENT_API_URL ?? import.meta.env.VITE_API_URL ?? 'http://localhost:8001/api/v1';
-
 export const guardiansApi = {
-  create: async (payload: {
+  create: (payload: {
     firstname: string;
     lastname: string;
     relation: string;
@@ -65,47 +70,67 @@ export const guardiansApi = {
     address?: string;
     student_uuid?: string;
     is_primary?: boolean;
-  }) => {
-    const token = localStorage.getItem('auth-storage');
-    let bearer: string | null = null;
-    try { bearer = token ? JSON.parse(token)?.state?.token : null; } catch { /* ignore */ }
-    const establishmentId = import.meta.env.VITE_ESTABLISHMENT_ID ?? '';
-    const response = await fetch(`${STUDENT_API}/guardians`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Establishment-ID': establishmentId,
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json();
-    if (!response.ok || body.success === false) throw new Error(body.message ?? 'Erreur création tuteur');
-    return body.data as GuardianApiModel;
-  },
+  }) => post<GuardianApiModel>(studentClient, '/guardians', payload),
 };
 
 export const authApi = {
   login: async (email: string, password: string): Promise<LoginResponse> => {
-    const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1'}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ identifier: email, password }),
+    const response = await authClient.post('/auth/login', {
+      identifier: email,
+      password,
     });
 
-    const body = await response.json();
-
-    if (!response.ok || body.success === false) {
-      throw new Error(body.message ?? 'Échec de connexion');
+    if (response.status === 202) {
+      const data = response.data as { requires_two_factor?: boolean };
+      if (data?.requires_two_factor) {
+        throw new Error('Authentification à deux facteurs requise. Contactez l\'administrateur.');
+      }
     }
 
-    return body.data;
+    const data = response.data as LoginApiData;
+    const tokens = data.tokens ?? (data as unknown as LoginTokens);
+
+    return {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_in: tokens.expires_in,
+      token_type: tokens.token_type ?? 'Bearer',
+      user: {
+        uuid: data.user_uuid ?? data.user?.uuid ?? '',
+        email: data.email ?? email,
+        firstname: data.firstname ?? data.user?.firstname,
+        lastname: data.lastname ?? data.user?.lastname,
+        full_name: data.full_name,
+        roles: data.roles,
+      },
+    };
   },
+
+  me: (token: string) =>
+    authClient
+      .get<AuthMeResponse>('/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => res.data),
 };
+
+interface LoginTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type?: string;
+}
+
+interface LoginApiData extends Partial<LoginTokens> {
+  user_uuid?: string;
+  email?: string;
+  firstname?: string;
+  lastname?: string;
+  full_name?: string;
+  roles?: string[];
+  tokens?: LoginTokens;
+  user?: { uuid: string; firstname?: string; lastname?: string };
+}
 
 export interface LoginResponse {
   access_token: string;
@@ -117,7 +142,18 @@ export interface LoginResponse {
     email: string;
     firstname?: string;
     lastname?: string;
+    full_name?: string;
+    roles?: string[];
   };
+}
+
+export interface AuthMeResponse {
+  uuid: string;
+  email: string;
+  firstname: string;
+  lastname: string;
+  full_name: string;
+  roles: string[];
 }
 
 export interface EstablishmentApiModel {
@@ -176,49 +212,28 @@ export interface GuardianApiModel {
   qr_badge_code: string | null;
 }
 
-const ENROLLMENT_API = import.meta.env.VITE_ENROLLMENT_API_URL ?? 'http://localhost:8002/api/v1';
-
-async function enrollmentRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('auth-storage');
-  let bearer: string | null = null;
-  try {
-    bearer = token ? JSON.parse(token)?.state?.token : null;
-  } catch { /* ignore */ }
-
-  const establishmentId = import.meta.env.VITE_ESTABLISHMENT_ID ?? '';
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Establishment-ID': establishmentId,
-    ...(options.headers as Record<string, string> | undefined),
-  };
-  if (bearer) headers.Authorization = `Bearer ${bearer}`;
-
-  const response = await fetch(`${ENROLLMENT_API}${path}`, { ...options, headers });
-  const body = await response.json();
-  if (!response.ok || body.success === false) {
-    throw new Error(body.message ?? `Request failed (${response.status})`);
-  }
-  return body.data as T;
-}
-
 export const enrollmentApi = {
   listEstablishments: () =>
-    enrollmentRequest<{ items: EstablishmentApiModel[]; pagination: { total: number } }>('/establishments'),
+    get<{ items: EstablishmentApiModel[]; pagination: { total: number } }>(
+      enrollmentClient,
+      '/establishments',
+    ),
 
   listAcademicYears: () =>
-    enrollmentRequest<{ items: AcademicYearApiModel[] }>('/academic-years'),
+    get<{ items: AcademicYearApiModel[] }>(enrollmentClient, '/academic-years'),
 
   listClasses: (level?: string) =>
-    enrollmentRequest<{ items: ClassApiModel[] }>(`/classes${level ? `?level=${level}` : ''}`),
+    get<{ items: ClassApiModel[] }>(enrollmentClient, '/classes', level ? { level } : undefined),
 
   listEnrollments: (status?: string) =>
-    enrollmentRequest<{ items: EnrollmentApiModel[]; pagination: { total: number } }>(
-      `/enrollments${status ? `?status=${status}` : ''}`,
+    get<{ items: EnrollmentApiModel[]; pagination: { total: number } }>(
+      enrollmentClient,
+      '/enrollments',
+      status ? { status } : undefined,
     ),
 
   getEnrollment: (uuid: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}`),
+    get<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}`),
 
   createEnrollment: (payload: {
     academic_year_uuid: string;
@@ -226,66 +241,28 @@ export const enrollmentApi = {
     guardian_uuid?: string;
     documents_complete?: boolean;
     registration_fee_paid?: boolean;
-  }) =>
-    enrollmentRequest<EnrollmentApiModel>('/enrollments', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  }) => post<EnrollmentApiModel>(enrollmentClient, '/enrollments', payload),
 
   submitEnrollment: (uuid: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/submit`, { method: 'POST' }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/submit`),
 
   validateEnrollment: (uuid: string, notes?: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/validate`, {
-      method: 'POST',
-      body: JSON.stringify({ notes }),
-    }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/validate`, { notes }),
 
   assignClass: (uuid: string, classUuid: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/assign-class`, {
-      method: 'POST',
-      body: JSON.stringify({ class_uuid: classUuid }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/assign-class`, {
+      class_uuid: classUuid,
     }),
 
   activateEnrollment: (uuid: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/activate`, { method: 'POST' }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/activate`),
 
   rejectEnrollment: (uuid: string, reason: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/reject`, { reason }),
 
   requestDocuments: (uuid: string, notes: string) =>
-    enrollmentRequest<EnrollmentApiModel>(`/enrollments/${uuid}/request-documents`, {
-      method: 'POST',
-      body: JSON.stringify({ notes }),
-    }),
+    post<EnrollmentApiModel>(enrollmentClient, `/enrollments/${uuid}/request-documents`, { notes }),
 };
-
-const ATTENDANCE_API = import.meta.env.VITE_ATTENDANCE_API_URL ?? 'http://localhost:8003/api/v1';
-
-async function attendanceRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('auth-storage');
-  let bearer: string | null = null;
-  try { bearer = token ? JSON.parse(token)?.state?.token : null; } catch { /* ignore */ }
-
-  const establishmentId = import.meta.env.VITE_ESTABLISHMENT_ID ?? '';
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Establishment-ID': establishmentId,
-    ...(options.headers as Record<string, string> | undefined),
-  };
-  if (bearer) headers.Authorization = `Bearer ${bearer}`;
-
-  const response = await fetch(`${ATTENDANCE_API}${path}`, { ...options, headers });
-  const body = await response.json();
-  if (!response.ok || body.success === false) {
-    throw new Error(body.message ?? `Request failed (${response.status})`);
-  }
-  return body.data as T;
-}
 
 export interface AttendanceRecordApiModel {
   uuid: string;
@@ -307,59 +284,39 @@ export interface ParentExitSessionApiModel {
 export const attendanceApi = {
   list: (date?: string) => {
     const d = date ?? new Date().toISOString().split('T')[0];
-    return attendanceRequest<{ items: AttendanceRecordApiModel[]; stats: Record<string, number>; date: string }>(
-      `/attendances?date=${d}`,
+    return get<{ items: AttendanceRecordApiModel[]; stats: Record<string, number>; date: string }>(
+      attendanceClient,
+      '/attendances',
+      { date: d },
     );
   },
 
   scanArrival: (qrCode: string, terminalId = 'GATE-01') =>
-    attendanceRequest<AttendanceRecordApiModel>('/attendances/scan/arrival', {
-      method: 'POST',
-      body: JSON.stringify({ qr_code: qrCode, terminal_id: terminalId }),
+    post<AttendanceRecordApiModel>(attendanceClient, '/attendances/scan/arrival', {
+      qr_code: qrCode,
+      terminal_id: terminalId,
     }),
 
   scanParentExit: (qrCode: string, terminalId = 'GATE-EXIT-01') =>
-    attendanceRequest<ParentExitSessionApiModel>('/attendances/scan/exit/parent', {
-      method: 'POST',
-      body: JSON.stringify({ qr_code: qrCode, terminal_id: terminalId }),
+    post<ParentExitSessionApiModel>(attendanceClient, '/attendances/scan/exit/parent', {
+      qr_code: qrCode,
+      terminal_id: terminalId,
     }),
 
   scanChildExit: (qrCode: string, parentSessionToken: string, terminalId = 'GATE-EXIT-01') =>
-    attendanceRequest<AttendanceRecordApiModel>('/attendances/scan/exit/child', {
-      method: 'POST',
-      body: JSON.stringify({ qr_code: qrCode, parent_session_token: parentSessionToken, terminal_id: terminalId }),
+    post<AttendanceRecordApiModel>(attendanceClient, '/attendances/scan/exit/child', {
+      qr_code: qrCode,
+      parent_session_token: parentSessionToken,
+      terminal_id: terminalId,
     }),
 
   markClassPresent: (studentUuid: string, present: boolean, notes?: string) =>
-    attendanceRequest<AttendanceRecordApiModel>('/attendances/class-check', {
-      method: 'POST',
-      body: JSON.stringify({ student_uuid: studentUuid, present, notes }),
+    post<AttendanceRecordApiModel>(attendanceClient, '/attendances/class-check', {
+      student_uuid: studentUuid,
+      present,
+      notes,
     }),
 };
-
-const GRADE_API = import.meta.env.VITE_GRADE_API_URL ?? 'http://localhost:8004/api/v1';
-
-async function gradeRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('auth-storage');
-  let bearer: string | null = null;
-  try { bearer = token ? JSON.parse(token)?.state?.token : null; } catch { /* ignore */ }
-
-  const establishmentId = import.meta.env.VITE_ESTABLISHMENT_ID ?? '';
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Establishment-ID': establishmentId,
-    ...(options.headers as Record<string, string> | undefined),
-  };
-  if (bearer) headers.Authorization = `Bearer ${bearer}`;
-
-  const response = await fetch(`${GRADE_API}${path}`, { ...options, headers });
-  const body = await response.json();
-  if (!response.ok || body.success === false) {
-    throw new Error(body.message ?? `Request failed (${response.status})`);
-  }
-  return body.data as T;
-}
 
 export interface EvaluationPeriodApiModel {
   uuid: string;
@@ -404,58 +361,46 @@ export interface BulletinApiModel {
 
 export const gradesApi = {
   listPeriods: () =>
-    gradeRequest<EvaluationPeriodApiModel[]>('/evaluation-periods'),
+    get<EvaluationPeriodApiModel[]>(gradeClient, '/evaluation-periods'),
 
   listCompetences: () =>
-    gradeRequest<CompetenceApiModel[]>('/competences'),
+    get<CompetenceApiModel[]>(gradeClient, '/competences'),
 
   getEvaluations: (studentUuid: string, periodUuid: string) =>
-    gradeRequest<StudentEvaluationApiModel[]>(
-      `/evaluations?student_uuid=${studentUuid}&period_uuid=${periodUuid}`,
-    ),
+    get<StudentEvaluationApiModel[]>(gradeClient, '/evaluations', {
+      student_uuid: studentUuid,
+      period_uuid: periodUuid,
+    }),
 
   saveEvaluations: (payload: {
     student_uuid: string;
     period_uuid: string;
     class_uuid?: string;
     items: { competence_uuid: string; rating: string; observation?: string }[];
-  }) =>
-    gradeRequest<StudentEvaluationApiModel[]>('/evaluations', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  }) => post<StudentEvaluationApiModel[]>(gradeClient, '/evaluations', payload),
 
-  listBulletins: (params?: { period_uuid?: string; status?: string; page?: number }) => {
-    const qs = new URLSearchParams();
-    if (params?.period_uuid) qs.set('period_uuid', params.period_uuid);
-    if (params?.status) qs.set('status', params.status);
-    if (params?.page) qs.set('page', String(params.page));
-    const query = qs.toString();
-    return gradeRequest<{ items: BulletinApiModel[]; pagination: { total: number; page: number; per_page: number } }>(
-      `/bulletins${query ? `?${query}` : ''}`,
-    );
-  },
+  listBulletins: (params?: { period_uuid?: string; status?: string; page?: number }) =>
+    get<{ items: BulletinApiModel[]; pagination: { total: number; page: number; per_page: number } }>(
+      gradeClient,
+      '/bulletins',
+      params as Record<string, unknown> | undefined,
+    ),
 
   getBulletin: (uuid: string) =>
-    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}`),
+    get<BulletinApiModel>(gradeClient, `/bulletins/${uuid}`),
 
   generateBulletin: (payload: {
     student_uuid: string;
     period_uuid: string;
     class_uuid?: string;
     teacher_comment?: string;
-  }) =>
-    gradeRequest<BulletinApiModel>('/bulletins', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  }) => post<BulletinApiModel>(gradeClient, '/bulletins', payload),
 
   publishBulletin: (uuid: string, directorComment?: string) =>
-    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}/publish`, {
-      method: 'POST',
-      body: JSON.stringify({ director_comment: directorComment }),
+    post<BulletinApiModel>(gradeClient, `/bulletins/${uuid}/publish`, {
+      director_comment: directorComment,
     }),
 
   deliverBulletin: (uuid: string) =>
-    gradeRequest<BulletinApiModel>(`/bulletins/${uuid}/deliver`, { method: 'POST' }),
+    post<BulletinApiModel>(gradeClient, `/bulletins/${uuid}/deliver`),
 };

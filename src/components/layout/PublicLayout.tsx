@@ -1,4 +1,3 @@
-import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { School, Menu, X } from 'lucide-react';
@@ -18,8 +17,8 @@ export function PublicLayout() {
                 <School className="w-6 h-6 text-white" />
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-secondary-900">EduPlatform</span>
-                <span className="text-xs text-secondary-400">Education Nationale - Sénégal</span>
+                <span className="font-bold text-secondary-900">EduGuinée</span>
+                <span className="text-xs text-primary-600">République de Guinée</span>
               </div>
             </Link>
 

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { studentsApi, type StudentApiModel } from '../../lib/api';
-import type { Student } from '../../types';
-import { students as mockStudents } from '../../mock/data';
+import { studentsApi, type StudentApiModel } from '../lib/api';
+import type { Student } from '../types';
+import { students as mockStudents } from '../mock/data';
 
 const statusMap: Record<string, Student['statut']> = {
   active: 'actif',
